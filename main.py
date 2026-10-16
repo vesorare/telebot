@@ -1,11 +1,13 @@
 from os import getenv
 from dotenv import load_dotenv
 import telebot
-import webbrowser
 import sqlite3
+import requests
+import json
 
 load_dotenv()
 TOKEN = getenv("BOT_TOKEN")
+WEATHER = getenv("WEATHER_API")
 
 bot = telebot.TeleBot(TOKEN)
 name = None
@@ -77,6 +79,19 @@ def reply_to_photo(message):
     markup.row(telebot.types.InlineKeyboardButton("Delete image", callback_data="delete"), telebot.types.InlineKeyboardButton("Edit message", callback_data="edit"))
     bot.reply_to(message, "Such a beautiful image", reply_markup=markup)
 
+
+@bot.message_handler(commands=["weather"])
+def weather(message):
+    text = message.text.strip().split(maxsplit=1)
+    if len(text) != 2:
+        bot.reply_to(message, "Invalid command")
+    else:
+        weather_res = requests.get(f"https://api.openweathermap.org/data/2.5/weather?q={text[1]}&appid={WEATHER}&units=metric")
+        weather_data = weather_res.json()
+        bot.reply_to(message, f"Weather in {text[1]}:\n"
+                    f"Temp: {weather_data["main"]["temp"]}\n"
+                    f"Descriptions: {weather_data["weather"][0]["description"]}")
+        
 @bot.callback_query_handler()
 def callback_message(callback):
     if callback.data == "delete":
