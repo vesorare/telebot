@@ -4,13 +4,18 @@ import telebot
 import sqlite3
 import requests
 import json
+from currency_converter import CurrencyConverter
 
 load_dotenv()
 TOKEN = getenv("BOT_TOKEN")
 WEATHER = getenv("WEATHER_API")
+EXCHANGE = getenv("EXCHANGE_API")
 
 bot = telebot.TeleBot(TOKEN)
 name = None
+password = None
+currency = CurrencyConverter()
+amount = 0
 
 print("start")
 
@@ -41,6 +46,7 @@ def user_name(message):
     bot.register_next_step_handler(message, user_pass)
     
 def user_pass(message):
+    global password
     password = message.text.strip()
     
     conn = sqlite3.connect("db.sql")
@@ -82,15 +88,65 @@ def reply_to_photo(message):
 
 @bot.message_handler(commands=["weather"])
 def weather(message):
-    text = message.text.strip().split(maxsplit=1)
-    if len(text) != 2:
-        bot.reply_to(message, "Invalid command")
+    bot.send_message(message.chat.id, "Enter the city:")
+    bot.register_next_step_handler(message, send_weather)
+
+        
+def send_weather(message):
+    city = message.text.strip()
+    weather_res = requests.get(f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER}&units=metric")
+    weather_data = weather_res.json()
+    bot.reply_to(message, f"Weather in {city}:\n"
+    f"Temp: {weather_data["main"]["temp"]}\n"
+    f"Descriptions: {weather_data["weather"][0]["description"]}")
+        
+        
+@bot.message_handler(commands=["convert"])
+def convert(message):
+    bot.send_message(message.chat.id, "Enter currency amount: ")
+    bot.register_next_step_handler(message, get_amount)
+
+def get_amount(message):    
+    try:
+        global amount
+        amount = int(message.text.strip())
+    except ValueError:
+        bot.send_message(message.chat.id, "Invalid format. Enter a number:")
+        bot.register_next_step_handler(message, get_amount)
+        return
+    
+    if amount > 0:
+        markup = telebot.types.InlineKeyboardMarkup()
+        btn_USD_EUR = telebot.types.InlineKeyboardButton("USD/EUR", callback_data="USD/EUR")
+        btn_EUR_USD = telebot.types.InlineKeyboardButton("EUR/USD", callback_data="EUR/USD")
+        btn_USD_RUB = telebot.types.InlineKeyboardButton("USD/RUB", callback_data="USD/RUB")
+        btn_RUB_USD = telebot.types.InlineKeyboardButton("RUB/USD", callback_data="RUB/USD")
+        btn_KZT_RUB = telebot.types.InlineKeyboardButton("KZT/RUB", callback_data="KZT/RUB")
+        btn_RUB_KZT = telebot.types.InlineKeyboardButton("RUB/KZT", callback_data="RUB/KZT")
+        btn_KZT_USD = telebot.types.InlineKeyboardButton("KZT/USD", callback_data="KZT/USD")
+        btn_USD_KZT = telebot.types.InlineKeyboardButton("USD/KZT", callback_data="USD/KZT")
+        btn_another = telebot.types.InlineKeyboardButton("Another pair", callback_data="another_pair")
+        markup.row(btn_USD_EUR, btn_EUR_USD)
+        markup.row(btn_USD_RUB, btn_RUB_USD)
+        markup.row(btn_KZT_RUB, btn_RUB_KZT)
+        markup.row(btn_KZT_USD, btn_USD_KZT)
+        markup.row(btn_another)
+        
+        bot.send_message(message.chat.id , "Choose currency pair:", reply_markup=markup)
     else:
-        weather_res = requests.get(f"https://api.openweathermap.org/data/2.5/weather?q={text[1]}&appid={WEATHER}&units=metric")
-        weather_data = weather_res.json()
-        bot.reply_to(message, f"Weather in {text[1]}:\n"
-                    f"Temp: {weather_data["main"]["temp"]}\n"
-                    f"Descriptions: {weather_data["weather"][0]["description"]}")
+        bot.send_message(message.chat.id, "Number must be bigger than 0. Enter number:")
+        bot.register_next_step_handler(message, get_amount)
+
+def convert_another_pair(message):
+    try:
+        values = message.text.strip().upper().split("/")
+        exchange_res = requests.get(f"https://v6.exchangerate-api.com/v6/{EXCHANGE}/latest/{values[0]}")
+        exchange_data = exchange_res.json()
+        bot.send_message(message.chat.id, f"{amount}{values[0]} to {values[1]}: {round(amount * exchange_data['conversion_rates'][values[1]], 2)}")
+    except Exception:
+        bot.send_message(message.chat.id, f"Something is wrong. Try again.")
+        bot.register_next_step_handler(message, convert_another_pair)
+
         
 @bot.callback_query_handler()
 def callback_message(callback):
@@ -111,7 +167,14 @@ def callback_message(callback):
         for user in users:
             info += f"Username: {user[1]} | Password: {user[2]}\n"
         bot.send_message(callback.message.chat.id, info)
-        
+    elif "/" in callback.data:
+        values = callback.data.strip().split("/")
+        exchange_res = requests.get(f"https://v6.exchangerate-api.com/v6/{EXCHANGE}/latest/{values[0]}")
+        exchange_data = exchange_res.json()
+        bot.send_message(callback.message.chat.id, f"{amount}{values[0]} to {values[1]}: {round(amount * exchange_data['conversion_rates'][values[1]], 2)}")
+    elif callback.data == "another_pair":
+        bot.send_message(callback.message.chat.id, "Enter a pair of currencys like in example. Example: USD/EUR")
+        bot.register_next_step_handler(callback.message, convert_another_pair)
 
 
 
