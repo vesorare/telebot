@@ -21,6 +21,17 @@ print("start")
 
 @bot.message_handler(commands=["start"])
 def start(message):
+ 
+    
+    
+    markup = telebot.types.ReplyKeyboardMarkup()
+    markup.row(telebot.types.KeyboardButton("/id"), telebot.types.KeyboardButton("/info"))
+    start_photo = open("thinkfast-chuklenuts.gif", "rb")
+    bot.send_animation(message.chat.id, start_photo, reply_markup=markup)
+    bot.send_message(message.chat.id, f"Hello, {message.from_user.first_name}", reply_markup=markup)
+    
+@bot.message_handler(commands=["register"])
+def register(message):
     conn = sqlite3.connect("db.sql")
     cur = conn.cursor()
     
@@ -29,16 +40,10 @@ def start(message):
     cur.close()
     conn.close()
     
-    
-    markup = telebot.types.ReplyKeyboardMarkup()
-    markup.row(telebot.types.KeyboardButton("/id"), telebot.types.KeyboardButton("/info"))
-    start_photo = open("thinkfast-chuklenuts.gif", "rb")
-    bot.send_animation(message.chat.id, start_photo, reply_markup=markup)
-    bot.send_message(message.chat.id, "Hello! Lets sign you up! Enter your name: ")
+    bot.send_message(message.chat.id, "Let`s sign you up.")
+    bot.send_message(message.chat.id, "Enter your name: ")
     bot.register_next_step_handler(message, user_name)
-    # bot.send_message(message.chat.id, f"Hello, {message.from_user.first_name}", reply_markup=markup)
-
-
+    
 def user_name(message):
     global name
     name = message.text.strip()
